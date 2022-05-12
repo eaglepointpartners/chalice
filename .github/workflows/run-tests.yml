@@ -25,6 +25,7 @@ jobs:
       - name: Run PRCheck
         run: make prcheck
   cdktests:
+    needs: [prcheck]
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -49,6 +50,7 @@ jobs:
         run: python -m pytest tests/functional/cdk
   tests-ubuntu:
     runs-on: ubuntu-latest
+    needs: [prcheck]
     strategy:
       matrix:
         python-version: [3.6, 3.7, 3.8, 3.9]
