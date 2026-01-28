@@ -11,7 +11,8 @@ from typing import cast
 
 import yaml
 from yaml.scanner import ScannerError
-from yaml.nodes import Node, ScalarNode, SequenceNode
+from yaml.nodes import Node  # noqa
+from yaml.nodes import ScalarNode, SequenceNode, MappingNode
 
 from chalice.deploy.swagger import (
     CFNSwaggerGenerator, TerraformSwaggerGenerator)
@@ -281,6 +282,21 @@ class SAMTemplateGenerator(TemplateGenerator):
             }  # type: Dict[str, Any]
             lambdafunction_definition['Properties'].update(layers_config)
 
+        if resource.log_group is not None:
+            num_days = resource.log_group.retention_in_days
+            log_name = self._register_cfn_resource_name(
+                resource.log_group.resource_name)
+            log_def = {
+                'Type': 'AWS::Logs::LogGroup',
+                'Properties': {
+                    'LogGroupName': {
+                        'Fn::Sub': '/aws/lambda/${%s}' % cfn_name
+                    },
+                    'RetentionInDays': num_days
+                }
+            }
+            resources[log_name] = log_def
+
         resources[cfn_name] = lambdafunction_definition
         self._add_iam_role(resource, resources[cfn_name])
 
@@ -298,6 +314,11 @@ class SAMTemplateGenerator(TemplateGenerator):
             # subclass of IAMRole.
             role = cast(models.PreCreatedIAMRole, role)
             cfn_resource['Properties']['Role'] = role.role_arn
+
+    def _generate_loggroup(self, resource, template):
+        # type: (models.LogGroup, Dict[str, Any]) -> None
+        # Handled in LambdaFunction generation
+        pass
 
     def _generate_restapi(self, resource, template):
         # type: (models.RestAPI, Dict[str, Any]) -> None
@@ -638,15 +659,20 @@ class SAMTemplateGenerator(TemplateGenerator):
                 'Fn::Sub': ('arn:${AWS::Partition}:sqs:${AWS::Region}'
                             ':${AWS::AccountId}:%s' % resource.queue)
             }
+        properties = {
+            'Queue': queue,
+            'BatchSize': resource.batch_size,
+            'MaximumBatchingWindowInSeconds':
+                resource.maximum_batching_window_in_seconds
+        }
+        if resource.maximum_concurrency:
+            properties["ScalingConfig"] = {
+                "MaximumConcurrency": resource.maximum_concurrency
+            }
         function_cfn['Properties']['Events'] = {
             sqs_cfn_name: {
                 'Type': 'SQS',
-                'Properties': {
-                    'Queue': queue,
-                    'BatchSize': resource.batch_size,
-                    'MaximumBatchingWindowInSeconds':
-                        resource.maximum_batching_window_in_seconds,
-                }
+                'Properties': properties
             }
         }
 
@@ -756,7 +782,7 @@ class SAMTemplateGenerator(TemplateGenerator):
                 {'CertificateArn': domain_name.certificate_arn,
                  'EndpointType': 'REGIONAL'},
             ]
-        }
+        }  # type: Dict[str, Any]
         if domain_name.tags:
             properties['Tags'] = domain_name.tags
         template['Resources'][cfn_name] = {
@@ -799,9 +825,9 @@ class TerraformGenerator(TemplateGenerator):
             'resource': {},
             'locals': {},
             'terraform': {
-                'required_version': '>= 0.12.26, < 1.2.0',
+                'required_version': '>= 0.12.26, < 1.4.0',
                 'required_providers': {
-                    'aws': {'version': '>= 2, < 4'},
+                    'aws': {'version': '>= 2, < 5'},
                     'null': {'version': '>= 2, < 4'}
                 }
             },
@@ -1102,14 +1128,20 @@ class TerraformGenerator(TemplateGenerator):
                 ":%(account_id)s:%(queue)s",
                 queue=resource.queue
             )
-        template['resource'].setdefault('aws_lambda_event_source_mapping', {})[
-            resource.resource_name] = {
+
+        aws_lambda_event_source_mapping = {
             'event_source_arn': event_source_arn,
             'batch_size': resource.batch_size,
             'maximum_batching_window_in_seconds':
                 resource.maximum_batching_window_in_seconds,
-            'function_name': self._fref(resource.lambda_function)
+            'function_name': self._fref(resource.lambda_function),
         }
+        if resource.maximum_concurrency:
+            aws_lambda_event_source_mapping["scaling_config"] = {
+                "maximum_concurrency": resource.maximum_concurrency
+            }
+        template['resource'].setdefault('aws_lambda_event_source_mapping', {})[
+            resource.resource_name] = aws_lambda_event_source_mapping
 
     def _generate_kinesiseventsource(self, resource, template):
         # type: (models.KinesisEventSource, Dict[str, Any]) -> None
@@ -1263,8 +1295,21 @@ class TerraformGenerator(TemplateGenerator):
             role = cast(models.PreCreatedIAMRole, resource.role)
             func_definition['role'] = role.role_arn
 
+        if resource.log_group is not None:
+            log_group = resource.log_group
+            num_days = log_group.retention_in_days
+            template['resource'].setdefault('aws_cloudwatch_log_group', {})[
+                log_group.resource_name] = {
+                    'name': log_group.resource_name,
+                    'retention_in_days': num_days,
+            }
         template['resource'].setdefault('aws_lambda_function', {})[
             resource.resource_name] = func_definition
+
+    def _generate_log_group(self, resource, remplate):
+        # type: (models.LogGroup, Dict[str, Any]) -> None
+        # Handled in LambdaFunction generation
+        pass
 
     def _generate_restapi(self, resource, template):
         # type: (models.RestAPI, Dict[str, Any]) -> None
@@ -1594,11 +1639,11 @@ class TemplateSerializer(object):
 
     def load_template(self, file_contents, filename=''):
         # type: (str, str) -> Dict[str, Any]
-        pass
+        raise NotImplementedError("load_template")
 
     def serialize_template(self, contents):
         # type: (Dict[str, Any]) -> str
-        pass
+        raise NotImplementedError("serialize_template")
 
 
 class JSONTemplateSerializer(TemplateSerializer):
@@ -1655,11 +1700,11 @@ class YAMLTemplateSerializer(TemplateSerializer):
         # type: (yaml.SafeLoader, Node) -> Any
         if node.tag[1:] == 'GetAtt' and isinstance(node.value,
                                                    six.string_types):
-            value = node.value.split('.', 1)
+            return node.value.split('.', 1)
         elif isinstance(node, ScalarNode):
-            value = loader.construct_scalar(node)
+            return loader.construct_scalar(node)
         elif isinstance(node, SequenceNode):
-            value = loader.construct_sequence(node)
-        else:
-            value = loader.construct_mapping(node)
-        return value
+            return loader.construct_sequence(node)
+        elif isinstance(node, MappingNode):
+            return loader.construct_mapping(node)
+        raise ValueError("Unknown YAML node: %s" % node)

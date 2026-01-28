@@ -97,8 +97,9 @@ def get_files_to_change():
     # * Tuple[str, str] - regex to search, replacement string
     # * Callable[[str, str], str] - function to handle custom logic
     files_with_version_numbers = {
-        'chalice/app.py': ("__version__ = '.*'", "__version__ = '{version}'"),
-        'CHANGELOG.rst': update_changelog,
+        'chalice/app.py': (
+            "__version__: str = '.*'", "__version__: str = '{version}'"),
+        'CHANGELOG.md': update_changelog,
         'docs/source/conf.py': update_doc_conf,
         'setup.py': ("version='(.*)'", "version='{version}'"),
     }
@@ -113,7 +114,7 @@ def _regex_based_version_bump(next_version_number, replacer, contents):
 
 
 def update_changelog(next_version_number, contents):
-    output = subprocess.check_output(['jmeslog', 'render'])
+    output = subprocess.check_output(['jmeslog', 'render', '-t', 'changelog'])
     return output.decode('utf-8')
 
 

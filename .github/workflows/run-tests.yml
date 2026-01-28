@@ -1,7 +1,13 @@
 name: Run PR Checks
 on:
   push:
+    branches:
+      - master
+      - "feature/**"
   pull_request:
+    branches:
+      - master
+      - "feature/**"
 jobs:
   prcheck:
     runs-on: ${{ matrix.os }}
@@ -11,7 +17,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest]
-        python-version: [3.6, 3.7, 3.8, 3.9]
+        python-version: [3.9, '3.10', 3.11, 3.12, 3.13]
     steps:
       - uses: actions/checkout@v2
       - uses: actions/setup-python@v2
@@ -20,16 +26,14 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - name: Install dependencies
         run: |
-          pip install -r requirements-dev.txt -r requirements-docs.txt
-          pip install --upgrade --upgrade-strategy eager -e .
+          make install-dev-deps
       - name: Run PRCheck
         run: make prcheck
   cdktests:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: [3.7, 3.8, 3.9]
-        cdk-version: [cdk, cdkv2]
+        python-version: [3.9, '3.10', 3.11, 3.12, 3.13]
     steps:
       - uses: actions/checkout@v2
       - uses: actions/setup-node@v2
@@ -43,8 +47,7 @@ jobs:
         run: npm install -g aws-cdk
       - name: Install dependencies
         run: |
-          pip install -r requirements-dev.txt -r requirements-docs.txt
-          pip install -e .[${{ matrix.cdk-version }}]
+          pip install -r requirements-test.txt --upgrade --upgrade-strategy eager -e .[cdkv2]
       - name: Run CDK tests
         run: python -m pytest tests/functional/cdk
 #  Chalice works on windows, but there's some differences between
@@ -69,7 +72,7 @@ jobs:
 #          python-version: ${{ matrix.python-version }}
 #      - name: Install dependencies
 #        run: |
-#          pip install -r requirements-dev.txt -r requirements-docs.txt
+#          pip install -r requirements-dev.txt
 #          pip install -e .
 #      - name: Run PRCheck
 #        run: python -m pytest tests/unit tests/functional tests/integration

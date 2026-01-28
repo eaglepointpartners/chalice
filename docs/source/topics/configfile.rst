@@ -224,7 +224,7 @@ specifying a ``websocket_api_custom_domain``:
 You can also provide the following optional configuration:
 
 - ``tls_version`` - The Transport Layer Security (TLS) version of the security
-  policy for this domain name.  Defaults to ``TLS_1_2``, you an also provide
+  policy for this domain name.  Defaults to ``TLS_1_2``, you can also provide
   ``TLS_1_0`` for REST APIs.
 - ``url_prefix`` - A custom domain name plus a url_prefix (BasePathMapping)
   specification identifies a deployed REST API in a given stage. With custom
@@ -314,6 +314,25 @@ only the following chalice deployed resources are tagged: Lambda functions.
 A boolean that turns on AWS XRay's Active tracing configuration.
 This will turn on XRay for both Lambda functions and API Gateway stages.
 
+
+``log_retention_in_days``
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+An integer value that indicates the retention time to be applied to lambda
+function log groups. Only certain values are valid, see the `AWS CloudWatch
+Logs docs
+<https://docs.aws.amazon.com/AmazonCloudWatchLogs/latest/APIReference/API_PutRetentionPolicy.html#API_PutRetentionPolicy_RequestParameters>`__
+
+.. warning::
+   If you using the `chalice package` command to generate a CloudFormation template,
+   a Log Group resource will be added to your template with the configured
+   ``log_retention_in_days``.  This will cause your deployment to fail
+   if this Log Group resource already exists (i.e. if the associated
+   Lambda function has previously been invoked which results in Lambda
+   automatically created a Log Group for the function).  In order to use
+   this configuration option, it should be part of the initial deployment
+   of the Lambda function.
+
 .. _lambda-config:
 
 Lambda Specific Configuration
@@ -374,6 +393,7 @@ that can be applied per function:
 * ``security_group_ids``
 * ``subnet_ids``
 * ``tags``
+* ``log_retention_in_days``
 
 
 See the :ref:`stage-config` section above for a description

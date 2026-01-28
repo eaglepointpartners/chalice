@@ -22,21 +22,18 @@ def recursive_include(relative_dir):
 install_requires = [
     'click>=7,<9.0',
     'botocore>=1.14.0,<2.0.0',
-    'typing==3.6.4;python_version<"3.7"',
-    'mypy-extensions==0.4.3',
     'six>=1.10.0,<2.0.0',
-    'pip>=9,<22.2',
-    'attrs>=19.3.0,<21.5.0',
+    'pip>=9,<25.1',
     'jmespath>=0.9.3,<2.0.0',
     'pyyaml>=5.3.1,<7.0.0',
-    'inquirer>=2.7.0,<3.0.0',
+    'inquirer>=3.0.0,<4.0.0',
     'wheel',
     'setuptools'
 ]
 
 setup(
     name='chalice',
-    version='1.27.0',
+    version='1.32.0',
     description="Microframework",
     long_description=README,
     author="James Saryerwinnie",
@@ -45,7 +42,7 @@ setup(
     packages=find_packages(exclude=['tests', 'tests.*']),
     install_requires=install_requires,
     extras_require={
-        'event-file-poller': ['watchdog==0.9.0'],
+        'event-file-poller': ['watchdog==2.3.1'],
         'cdk': [
             'aws_cdk.aws_iam>=1.85.0,<2.0',
             'aws_cdk.aws-s3-assets>=1.85.0,<2.0',
@@ -71,9 +68,10 @@ setup(
         'License :: OSI Approved :: Apache Software License',
         'Natural Language :: English',
         "Programming Language :: Python :: 3",
-        'Programming Language :: Python :: 3.6',
-        'Programming Language :: Python :: 3.7',
-        'Programming Language :: Python :: 3.8',
         'Programming Language :: Python :: 3.9',
+        'Programming Language :: Python :: 3.10',
+        'Programming Language :: Python :: 3.11',
+        'Programming Language :: Python :: 3.12',
+        'Programming Language :: Python :: 3.13',
     ],
 )

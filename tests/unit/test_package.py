@@ -1,6 +1,6 @@
 import os
 import json
-import mock
+from unittest import mock
 
 import pytest
 from chalice.config import Config
@@ -449,6 +449,20 @@ class TestTerraformTemplate(TemplateTestBase):
         tf_resource = self.get_function(template)
         assert tf_resource['reserved_concurrent_executions'] == 5
 
+    def test_adds_log_group_resource_when_configured(self, sample_app):
+        function = self.lambda_function()
+        name = function.resource_name + '-log-group'
+        function.log_group = models.LogGroup(
+            resource_name=name,
+            log_group_name='/aws/lambda/%s' % function.function_name,
+            retention_in_days=7)
+        template = self.template_gen.generate([function])
+        log_resource = template['resource']['aws_cloudwatch_log_group'][name]
+        assert log_resource == {
+            'name': name,
+            'retention_in_days': 7,
+        }
+
     def test_can_add_tracing_config(self, sample_app):
         function = self.lambda_function()
         function.xray = True
@@ -730,6 +744,34 @@ class TestTerraformTemplate(TemplateTestBase):
                    'function_name': '${aws_lambda_function.handler.arn}',
                    'batch_size': 5,
                    'maximum_batching_window_in_seconds': 0
+        }
+
+    def test_can_package_sqs_handler_with_max_concurrency(self, sample_app):
+        @sample_app.on_sqs_message(
+            queue='foo',
+            batch_size=5,
+            maximum_concurrency=2
+        )
+        def handler(event):
+            pass
+
+        config = Config.create(chalice_app=sample_app,
+                               project_dir='.',
+                               app_name='sample_app',
+                               api_gateway_stage='api')
+        template = self.generate_template(config)
+
+        assert template['resource'][
+                   'aws_lambda_event_source_mapping'][
+                   'handler-sqs-event-source'] == {
+                   'event_source_arn': (
+                       'arn:${data.aws_partition.chalice.partition}:sqs'
+                       ':${data.aws_region.chalice.name}:'
+                       '${data.aws_caller_identity.chalice.account_id}:foo'),
+                   'function_name': '${aws_lambda_function.handler.arn}',
+                   'batch_size': 5,
+                   'maximum_batching_window_in_seconds': 0,
+                   'scaling_config': {'maximum_concurrency': 2}
         }
 
     def test_sqs_arn_does_not_use_fn_sub(self, sample_app):
@@ -1201,6 +1243,22 @@ class TestSAMTemplate(TemplateTestBase):
         template = self.template_gen.generate([function])
         cfn_resource = list(template['Resources'].values())[0]
         assert cfn_resource['Properties']['ReservedConcurrentExecutions'] == 5
+
+    def test_adds_log_group_resource_when_configured(self, sample_app):
+        function = self.lambda_function()
+        function.log_group = models.LogGroup(
+            resource_name=function.resource_name + '-log-group',
+            log_group_name='/aws/lambda/%s' % function.function_name,
+            retention_in_days=7)
+        template = self.template_gen.generate([function])
+        log_resource = template['Resources']['FooLogGroup']
+        assert log_resource == {
+            'Type': 'AWS::Logs::LogGroup',
+            'Properties': {
+                'LogGroupName': {'Fn::Sub': '/aws/lambda/${Foo}'},
+                'RetentionInDays': 7
+            }
+        }
 
     def test_adds_layers_when_provided(self, sample_app):
         function = self.lambda_function()
@@ -1702,6 +1760,37 @@ class TestSAMTemplate(TemplateTestBase):
                     },
                     'BatchSize': 5,
                     'MaximumBatchingWindowInSeconds': 0,
+                },
+            }
+        }
+
+    def test_can_package_sqs_handler_with_max_concurrency(self, sample_app):
+        @sample_app.on_sqs_message(
+            queue='foo',
+            batch_size=5,
+            maximum_concurrency=2
+        )
+        def handler(event):
+            pass
+
+        config = Config.create(chalice_app=sample_app,
+                               project_dir='.',
+                               api_gateway_stage='api')
+        template = self.generate_template(config)
+        sns_handler = template['Resources']['Handler']
+        assert sns_handler['Properties']['Events'] == {
+            'HandlerSqsEventSource': {
+                'Type': 'SQS',
+                'Properties': {
+                    'Queue': {
+                        'Fn::Sub': (
+                            'arn:${AWS::Partition}:sqs:${AWS::Region}'
+                            ':${AWS::AccountId}:foo'
+                        )
+                    },
+                    'BatchSize': 5,
+                    'MaximumBatchingWindowInSeconds': 0,
+                    'ScalingConfig': {'MaximumConcurrency': 2}
                 },
             }
         }

@@ -17,9 +17,9 @@ check:
 
 pylint:
 	###### PYLINT ######
-	pylint --rcfile .pylintrc chalice --load-plugins tests.codelinter
+	pylint --rcfile .pylintrc chalice
 	# Run our custom linter on test code.
-	pylint --load-plugins tests.testlinter --disable=I,E,W,R,C,F --enable C9999,C9998 tests/
+	pylint --disable=I,E,W,R,C,F --enable C9999,C9998 tests/
 
 test:
 	py.test -v $(TESTS)
@@ -56,3 +56,6 @@ doccheck:
 	$(MAKE) -C docs html
 
 prcheck: check pylint coverage doccheck typecheck
+
+install-dev-deps:
+	pip install -r requirements-dev.txt --upgrade --upgrade-strategy eager -e .
